@@ -84,15 +84,6 @@ class APITestCase(unittest.TestCase):
             response = api.unauthorized(response)
         self.assertEquals(response.headers['WWW-Authenticate'], 'Basic realm="Foo"')
 
-    def test_handle_error_401_no_challenge_by_default(self):
-        app = Flask(__name__)
-        api = flask_restful.Api(app)
-
-        with app.test_request_context('/foo'):
-            resp = api.handle_error(Unauthorized())
-            self.assertEquals(resp.status_code, 401)
-            assert_false('WWW-Authenticate' in resp.headers)
-
     def test_handle_error_401_sends_challege_default_realm(self):
         app = Flask(__name__)
         api = flask_restful.Api(app, serve_challenge_on_401=True)
@@ -141,6 +132,24 @@ class APITestCase(unittest.TestCase):
         resp_dict = json.loads(resp.data.decode())
         self.assertEqual(resp_dict.get('status'), 409)
         self.assertEqual(resp_dict.get('message'), 'go away')
+
+    def test_handle_error_does_not_swallow_abort_response(self):
+
+        class HelloBombAbort(flask_restful.Resource):
+            def get(self):
+                raise HTTPException(response=flask.make_response("{}", 403))
+
+        app = Flask(__name__)
+        api = flask_restful.Api(app)
+        api.add_resource(HelloBombAbort, '/bomb')
+
+        app = app.test_client()
+        resp = app.get('/bomb')
+
+        resp_dict = json.loads(resp.data.decode())
+
+        self.assertEquals(resp.status_code, 403)
+        self.assertDictEqual(resp_dict, {})
 
     def test_marshal(self):
         fields = OrderedDict([('foo', flask_restful.fields.Raw)])
